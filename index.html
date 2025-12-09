@@ -18,14 +18,15 @@
         background:var(--bg);
         color:#111;
       }
+
+      /* 👇 Hide header & notice so only the main timeclock page shows */
       header{
-        background:var(--panel);
-        padding:12px 16px;
-        display:flex;
-        gap:12px;
-        align-items:center;
-        box-shadow:0 1px 0 rgba(0,0,0,0.04);
+        display:none !important;
       }
+      .notice{
+        display:none !important;
+      }
+
       .logo{
         display:flex;
         align-items:center;
@@ -63,8 +64,12 @@
         color:var(--accent);
         border:1px solid rgba(11,110,253,0.12);
       }
+
+      /* 👇 Make the iframe fill the whole screen */
       main{
-        height:calc(100% - 80px);
+        height:100vh;
+        margin:0;
+        padding:0;
       }
       .frame-wrap{
         height:100%;
@@ -76,15 +81,7 @@
         display:block;
         background:white;
       }
-      .notice{
-        padding:10px 14px;
-        background:#fff3cd;
-        color:#5a4520;
-        border:1px solid #ffeeba;
-        border-radius:8px;
-        margin:12px;
-        display:none;
-      }
+
       .small{
         font-size:13px;
         color:var(--muted);
@@ -134,7 +131,12 @@
 
     <script>
       (function(){
-        const BASE = "https://www.opentimeclock.com/app.html?page=company&companyname=TGS Carwash";
+        // 👇 Base URL now correctly ends with companyname=
+        const BASE = "https://www.opentimeclock.com/app.html?page=company&companyname=";
+
+        // 👇 Default company that will auto-load
+        const DEFAULT_COMPANY = "TGS Carwash"; // change this to your real OTC company name if needed
+
         const companyInput = document.getElementById("company");
         const goBtn = document.getElementById("go");
         const openBtn = document.getElementById("open");
@@ -157,64 +159,49 @@
           return BASE + encodeURIComponent(name || "");
         }
 
-        function setIframeFor(name, opts = {replace:false}){
-          if(!name){
-            notice.textContent = "Please enter your company name (or add ?company=YourCompany to the URL).";
-            notice.style.display = "block";
-            iframe.src = buildSrc("");
-            openBtn.href = buildSrc("");
-            return;
-          }
-          notice.style.display = "none";
-          const src = buildSrc(name);
+        function setIframeFor(name){
+          const src = buildSrc(name || "");
           iframe.src = src;
-          openBtn.dataset.href = src;
-        }
-
-        // Load initial value from query param -> localStorage -> empty
-        const initial = q("company") || loadSaved();
-        if(initial) {
-          companyInput.value = initial;
-          setIframeFor(initial);
-        } else {
-          setIframeFor("");
-        }
-
-        // Handlers
-        goBtn.addEventListener("click", () => {
-          const val = companyInput.value.trim();
-          if(!val) { setIframeFor(""); return; }
-          saveName(val);
-          setIframeFor(val);
-        });
-
-        companyInput.addEventListener("keydown", (e) => {
-          if(e.key === "Enter") { goBtn.click(); }
-        });
-
-        openBtn.addEventListener("click", (e) => {
-          // Open in new tab (fallback if embedding blocked)
-          const href = openBtn.dataset.href || buildSrc(companyInput.value.trim());
-          if(!href) return;
-          window.open(href, "_blank", "noreferrer");
-        });
-
-        // Best-effort detect iframe embedding blocked:
-        // If the iframe doesn't load a document within N seconds, show a friendly hint.
-        let loaded = false;
-        iframe.addEventListener("load", () => {
-          // If accessible cross-origin, we could inspect content; we don't.
-          loaded = true;
-          // hide any previous warning
-          notice.style.display = "none";
-        });
-
-        setTimeout(() => {
-          if(!loaded) {
-            notice.innerHTML = "If the timeclock doesn't appear above, the remote site may block framing. Click \"Open in site\" to use the timeclock in a new tab.";
-            notice.style.display = "block";
+          if (openBtn) {
+            openBtn.dataset.href = src;
           }
-        }, 3000);
+        }
+
+        // 👇 Auto-load default company (or query/localStorage override)
+        const initial = q("company") || loadSaved() || DEFAULT_COMPANY;
+
+        if (companyInput) {
+          companyInput.value = initial;
+        }
+        saveName(initial);
+        setIframeFor(initial);
+
+        // Handlers (not visible, but kept for flexibility)
+        if (goBtn) {
+          goBtn.addEventListener("click", () => {
+            const val = (companyInput.value || "").trim();
+            if(!val) { return; }
+            saveName(val);
+            setIframeFor(val);
+          });
+        }
+
+        if (companyInput) {
+          companyInput.addEventListener("keydown", (e) => {
+            if(e.key === "Enter" && goBtn) { goBtn.click(); }
+          });
+        }
+
+        if (openBtn) {
+          openBtn.addEventListener("click", (e) => {
+            const href = openBtn.dataset.href || buildSrc((companyInput.value || "").trim());
+            if(!href) return;
+            window.open(href, "_blank", "noreferrer");
+          });
+        }
+
+        // Keep this simple: if iframe doesn't load in a few seconds, we won't show any notice
+        // because notice is hidden for kiosk use.
       })();
     </script>
   </body>

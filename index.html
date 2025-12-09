@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>CTI Time Clock</title>
+    <style>
+      :root{
+        --bg:#f5f5f5;
+        --panel:#fff;
+        --accent:#0b6efd;
+        --muted:#666;
+      }
+      html,body{
+        height:100%;
+        margin:0;
+        font-family:system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;
+        background:var(--bg);
+        color:#111;
+      }
+      header{
+        background:var(--panel);
+        padding:12px 16px;
+        display:flex;
+        gap:12px;
+        align-items:center;
+        box-shadow:0 1px 0 rgba(0,0,0,0.04);
+      }
+      .logo{
+        display:flex;
+        align-items:center;
+        gap:12px;
+        flex:1 1 auto;
+      }
+      .logo img{
+        max-height:52px;
+        display:block;
+      }
+      .controls{
+        display:flex;
+        gap:8px;
+        align-items:center;
+        flex:0 0 auto;
+      }
+      input[type="text"]{
+        padding:8px 10px;
+        border-radius:8px;
+        border:1px solid #ddd;
+        min-width:220px;
+        font-size:14px;
+      }
+      button{
+        padding:8px 10px;
+        border-radius:8px;
+        border:1px solid rgba(0,0,0,0.08);
+        background:var(--accent);
+        color:white;
+        cursor:pointer;
+        font-weight:600;
+      }
+      button.ghost{
+        background:transparent;
+        color:var(--accent);
+        border:1px solid rgba(11,110,253,0.12);
+      }
+      main{
+        height:calc(100% - 80px);
+      }
+      .frame-wrap{
+        height:100%;
+      }
+      iframe{
+        width:100%;
+        height:100%;
+        border:0;
+        display:block;
+        background:white;
+      }
+      .notice{
+        padding:10px 14px;
+        background:#fff3cd;
+        color:#5a4520;
+        border:1px solid #ffeeba;
+        border-radius:8px;
+        margin:12px;
+        display:none;
+      }
+      .small{
+        font-size:13px;
+        color:var(--muted);
+        margin-left:8px;
+      }
+      @media (max-width:640px){
+        header{
+          flex-direction:column;
+          align-items:stretch;
+          gap:8px;
+        }
+        .controls{
+          justify-content:space-between;
+        }
+        input[type="text"]{min-width:140px; width:100%;}
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="logo">
+        <img src="logo.png" alt="Company Logo" onerror="this.style.display='none'">
+        <div>
+          <div style="font-weight:700">CTI Time Clock</div>
+          <div class="small">Embedded OpenTimeClock page</div>
+        </div>
+      </div>
+
+      <div class="controls" aria-hidden="false">
+        <label for="company" class="small" style="display:none">Company</label>
+        <input id="company" type="text" placeholder="Company name (e.g. Acme Inc.)" />
+        <button id="go">Load</button>
+        <button id="open" class="ghost" title="Open in OpenTimeClock">Open in site</button>
+      </div>
+    </header>
+
+    <main>
+      <div id="notice" class="notice" role="status"></div>
+      <div class="frame-wrap">
+        <iframe id="timeframe"
+          title="CTI Time Clock iframe"
+          src=""
+          allow="geolocation; camera; microphone; clipboard-read; clipboard-write">
+        </iframe>
+      </div>
+    </main>
+
+    <script>
+      (function(){
+        const BASE = "https://www.opentimeclock.com/app.html?page=company&companyname=";
+        const companyInput = document.getElementById("company");
+        const goBtn = document.getElementById("go");
+        const openBtn = document.getElementById("open");
+        const iframe = document.getElementById("timeframe");
+        const notice = document.getElementById("notice");
+
+        function q(name){
+          const params = new URLSearchParams(window.location.search);
+          return params.get(name);
+        }
+
+        function saveName(name){
+          try{ localStorage.setItem("otc_company", name); }catch(e){}
+        }
+        function loadSaved(){
+          try{return localStorage.getItem("otc_company")||"";}catch(e){return "";}
+        }
+
+        function buildSrc(name){
+          return BASE + encodeURIComponent(name || "");
+        }
+
+        function setIframeFor(name, opts = {replace:false}){
+          if(!name){
+            notice.textContent = "Please enter your company name (or add ?company=YourCompany to the URL).";
+            notice.style.display = "block";
+            iframe.src = buildSrc("");
+            openBtn.href = buildSrc("");
+            return;
+          }
+          notice.style.display = "none";
+          const src = buildSrc(name);
+          iframe.src = src;
+          openBtn.dataset.href = src;
+        }
+
+        // Load initial value from query param -> localStorage -> empty
+        const initial = q("company") || loadSaved();
+        if(initial) {
+          companyInput.value = initial;
+          setIframeFor(initial);
+        } else {
+          setIframeFor("");
+        }
+
+        // Handlers
+        goBtn.addEventListener("click", () => {
+          const val = companyInput.value.trim();
+          if(!val) { setIframeFor(""); return; }
+          saveName(val);
+          setIframeFor(val);
+        });
+
+        companyInput.addEventListener("keydown", (e) => {
+          if(e.key === "Enter") { goBtn.click(); }
+        });
+
+        openBtn.addEventListener("click", (e) => {
+          // Open in new tab (fallback if embedding blocked)
+          const href = openBtn.dataset.href || buildSrc(companyInput.value.trim());
+          if(!href) return;
+          window.open(href, "_blank", "noreferrer");
+        });
+
+        // Best-effort detect iframe embedding blocked:
+        // If the iframe doesn't load a document within N seconds, show a friendly hint.
+        let loaded = false;
+        iframe.addEventListener("load", () => {
+          // If accessible cross-origin, we could inspect content; we don't.
+          loaded = true;
+          // hide any previous warning
+          notice.style.display = "none";
+        });
+
+        setTimeout(() => {
+          if(!loaded) {
+            notice.innerHTML = "If the timeclock doesn't appear above, the remote site may block framing. Click \"Open in site\" to use the timeclock in a new tab.";
+            notice.style.display = "block";
+          }
+        }, 3000);
+      })();
+    </script>
+  </body>
+</html>
